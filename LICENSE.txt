@@ -1,6 +1,10 @@
 (The MIT License)
 
-Copyright (c) 2010-2011 Stafford Brunk
+Copyright (c) 2011-2013 Stafford Brunk (stafford.brunk@gmail.com)
+
+Copyright (c) 2013-2014 Nicolas Rodriguez (nrodriguez@jbox-web.com), JBox Web (http://www.jbox-web.com)
+
+Copyright (c) 2014 Oliver Günther (mail@oliverguenther.de)
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the

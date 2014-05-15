@@ -1,98 +1,91 @@
 module Gitolite
   class GitoliteAdmin
 
-    attr_accessor :gl_admin
+    attr_accessor :repo
 
-    CONFIG_FILE = "gitolite.conf"
     CONF_DIR    = "conf"
     KEY_DIR     = "keydir"
-    DEBUG       = false
-    TIMEOUT     = 10
 
-    # Gitolite gem's default commit message
-    DEFAULT_COMMIT_MSG = "Committed by the gitolite gem"
+    CONFIG_FILE = "gitolite.conf"
+    CONFIG_PATH = File.join(CONF_DIR, "gitolite.conf")
+
+
+    # Default settings
+    DEFAULT_SETTINGS = {
+      # clone/push url settings
+      git_user: 'git', 
+      hostname: 'localhost',
+
+      # Commit settings
+      author_name: 'gitolite-rugged gem',
+      author_email: 'gitolite-rugged@localhost',
+      commit_msg: 'Commited by the gitolite-rugged gem'
+    }
 
     class << self
 
-      # Checks to see if the given path is a gitolite-admin repository
+      # Checks if the given path is a gitolite-admin repository
       # A valid repository contains a conf folder, keydir folder,
       # and a configuration file within the conf folder
       def is_gitolite_admin_repo?(dir)
         # First check if it is a git repository
         begin
-          Grit::Repo.new(dir)
-        rescue Grit::NoSuchPathError, Grit::InvalidGitRepositoryError
+          repo = Rugged::Repository.new(dir)
+          return false if repo.empty?
+        rescue Rugged::RepositoryError
           return false
         end
 
-        # If we got here it is a valid git repo,
-        # now check directory structure
-        File.exists?(File.join(dir, 'conf')) &&
-          File.exists?(File.join(dir, 'keydir')) &&
-          !Dir.glob(File.join(dir, 'conf', '*.conf')).empty?
+        # Check if config file, key directory exist
+        [ File.join(dir, CONF_DIR), File.join(dir, KEY_DIR),
+          File.join(dir, CONFIG_PATH)
+        ].each { |f| return false unless File.exists?(f) }
+
+        true
       end
 
-
-      # This method will bootstrap a gitolite-admin repo
-      # at the given path.  A typical gitolite-admin
-      # repo will have the following tree:
-      #
-      # gitolite-admin
-      #   conf
-      #     gitolite.conf
-      #   keydir
-      def bootstrap(path, options = {})
-        if self.is_gitolite_admin_repo?(path)
-          if options[:overwrite]
-            FileUtils.rm_rf(File.join(path, '*'))
-          else
-            return self.new(path)
-          end
-        end
-
-        FileUtils.mkdir_p([File.join(path, "conf"), File.join(path, "keydir")])
-
-        options[:perm]  ||= "RW+"
-        options[:refex] ||= ""
-        options[:user]  ||= "git"
-
-        c = Config.init
-        r = Config::Repo.new(options[:repo] || "gitolite-admin")
-        r.add_permission(options[:perm], options[:refex], options[:user])
-        c.add_repo(r)
-        config = c.to_file(File.join(path, "conf"))
-
-        gl_admin = Grit::Repo.init(path)
-        gl_admin.git.native(:add, {:chdir => gl_admin.working_dir}, config)
-        gl_admin.git.native(:commit, {:chdir => gl_admin.working_dir}, '-a', '-m', options[:message] || "Config bootstrapped by the gitolite gem")
-
-        self.new(path)
+      def admin_url(settings)
+        [settings[:git_user], '@', settings[:host], '/gitolite-admin.git'].join
       end
-
     end
-
 
     # Intialize with the path to
     # the gitolite-admin repository
-    def initialize(path, options = {})
+    #
+    # Settings:
+    # :git_user: The git user to SSH to (:git_user@localhost:gitolite-admin.git), defaults to 'git'
+    # :private_key: The key file containing the private SSH key for :git_user
+    # :public_key: The key file containing the public SSH key for :git_user
+    # :host: Hostname for clone url. Defaults to 'localhost'
+    # The settings hash is forwarded to +GitoliteAdmin.new+ as options.
+    def initialize(path, settings = {})
       @path = path
+      @settings = DEFAULT_SETTINGS.merge(settings)
 
-      @config_file = options[:config_file] || CONFIG_FILE
-      @conf_dir    = options[:conf_dir] || CONF_DIR
-      @key_dir     = options[:key_dir] || KEY_DIR
-      @env         = options[:env] || {}
+      # Ensure SSH key settings exist
+      @settings.fetch(:public_key)
+      @settings.fetch(:private_key)
 
-      @config_file_path = File.join(@path, @conf_dir, @config_file)
-      @conf_dir_path    = File.join(@path, @conf_dir)
-      @key_dir_path     = File.join(@path, @key_dir)
+      # setup credentials
+      @credentials = Rugged::Credentials::SshKey.new(
+        username: settings[:git_user], publickey: settings[:public_key], 
+        privatekey: settings[:private_key] )
+      
+      @repo = 
+      if self.class.is_gitolite_admin_repo?(path)
+        Rugged::Repository.new(path)
+      else
+        clone
+      end
 
-      Grit::Git.git_timeout = options[:timeout] || TIMEOUT
-      Grit.debug = options[:debug] || DEBUG
-      @gl_admin  = Grit::Repo.new(path)
+      @config_file_path = File.join(@path, CONF_DIR, CONFIG_FILE)
+      @conf_dir_path    = File.join(@path, CONF_DIR)
+      @key_dir_path     = File.join(@path, KEY_DIR)
+
+      @commit_author = { email: settings[:author_email], name: settings[:author_name] }
 
       reload!
     end
-
 
     def config
       @config ||= load_config
@@ -110,23 +103,27 @@ module Gitolite
 
 
     def add_key(key)
-      raise "Key must be of type Gitolite::SSHKey!" unless key.instance_of? Gitolite::SSHKey
+      unless key.instance_of? Gitolite::SSHKey
+        raise GitoliteAdminError, "Key must be of type Gitolite::SSHKey!"
+      end
+
       ssh_keys[key.owner] << key
     end
 
 
     def rm_key(key)
-      raise "Key must be of type Gitolite::SSHKey!" unless key.instance_of? Gitolite::SSHKey
+      unless key.instance_of? Gitolite::SSHKey
+        raise GitoliteAdminError, "Key must be of type Gitolite::SSHKey!"
+      end
+
       ssh_keys[key.owner].delete key
     end
 
 
     # This method will destroy all local tracked changes, resetting the local gitolite
     # git repo to HEAD and reloading the entire repository
-    # Note that this will also delete all untracked files
     def reset!
-      @gl_admin.git.native(:reset, {:env => @env, :chdir => @gl_admin.working_dir, :hard => true}, 'HEAD')
-      @gl_admin.git.native(:clean, {:env => @env, :chdir => @gl_admin.working_dir, :d => true, :q => true, :f => true})
+      @repo.reset('origin/master', :hard)
       reload!
     end
 
@@ -141,12 +138,17 @@ module Gitolite
 
     # Writes all changed aspects out to the file system
     # will also stage all changes then commit
-    def save(commit_message = DEFAULT_COMMIT_MSG, options = {})
+    def save()
+
+      # Add all changes to index (staging area)
+      index = @repo.index
 
       #Process config file (if loaded, i.e. may be modified)
       if @config
         new_conf = @config.to_file(@conf_dir_path)
-        @gl_admin.git.native(:add, {:env => @env, :chdir => @gl_admin.working_dir}, new_conf)
+
+        # Rugged wants relative paths
+        index.add(CONFIG_PATH)
       end
 
       #Process ssh keys (if loaded, i.e. may be modified)
@@ -156,7 +158,8 @@ module Gitolite
 
         to_remove = (files - keys).map { |f| File.join(@key_dir, f) }
         to_remove.each do |key|
-          @gl_admin.git.native(:rm, {:env => @env, :chdir => @gl_admin.working_dir}, key)
+          File.unlink key
+          index.remove key
         end
 
         @ssh_keys.each_value do |key|
@@ -164,47 +167,82 @@ module Gitolite
           next if key.respond_to?(:dirty?) && !key.dirty?
           key.each do |k|
             new_key = k.to_file(@key_dir_path)
-            @gl_admin.git.native(:add, {:env => @env, :chdir => @gl_admin.working_dir}, new_key)
+            index.add new_key
           end
         end
       end
 
-      args = []
+      # Write index to git and resync fs
+      commit_tree = index.write_tree @repo
+      index.write
 
-      if options.has_key?(:author) && !options[:author].empty?
-        args << "--author='#{options[:author]}'"
-      end
+      commit_author = { email: 'wee@example.org', name: 'gitolite-rugged gem', time: Time.now }
 
-      @gl_admin.git.native(:commit, {:env => @env, :chdir => @gl_admin.working_dir}, '-a', '-m', commit_message, args.join(' '))
+      Rugged::Commit.create(@repo,
+        author: commit_author,
+        committer: commit_author,
+        message: @settings[:commit_msg],
+        parents: [repo.head.target],
+        tree: commit_tree,
+        update_ref: 'HEAD'
+      )
     end
 
 
     # Push back to origin
     def apply
-      @gl_admin.git.native(:push, {:env => @env, :chdir => @gl_admin.working_dir}, "origin", "master")
+      @repo.push 'origin', ['refs/heads/master']
     end
 
 
     # Commits all staged changes and pushes back to origin
-    def save_and_apply(commit_message = DEFAULT_COMMIT_MSG)
-      save(commit_message)
+    def save_and_apply()
+      save
       apply
     end
 
 
     # Updates the repo with changes from remote master
-    def update(options = {})
-      options = {:reset => true, :rebase => false}.merge(options)
+    # Warning: This resets the repo before pulling in the changes.
+    def update(settings = {})
+      reset!
 
-      reset! if options[:reset]
+      # Currently, this only supports merging origin/master into master.
+      master = repo.branches["master"].target
+      origin_master = repo.branches["origin/master"].target
 
-      @gl_admin.git.native(:pull, {:env => @env, :chdir => @gl_admin.working_dir, :rebase => options[:rebase]}, "origin", "master")
+      # Create the merged index in memory
+      merge_index = repo.merge_commits(master, origin_master)
+
+      # Complete the merge by comitting it
+      merge_commit = Rugged::Commit.create(@repo, 
+        parents: [ master, origin_master ],
+        tree: merge_index.write_tree(@repo),
+        message: '[gitolite-rugged] Merged `origin/master` into `master`',
+        author: @commit_author,
+        committer: @commit_author,
+        update_ref: 'master'
+      )
 
       reload!
     end
 
 
     private
+
+
+    # Clone the gitolite-admin repo
+    # to the given path.  
+    # 
+    # The repo is cloned from the url
+    # +(:git_user)@(:hostname)/gitolite-admin.git+
+    #
+    # The hostname may use an optional :port to allow for custom SSH ports.
+    # E.g., +git@localhost:2222/gitolite-admin.git+
+    #
+    def clone()
+      Rugged::Repository.clone_at(admin_url(@settings), File.expand_path(@path), credentials: @creds)
+    end    
 
 
     def load_config
@@ -234,6 +272,5 @@ module Gitolite
 
       keys
     end
-
   end
 end

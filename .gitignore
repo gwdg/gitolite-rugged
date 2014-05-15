@@ -7,3 +7,6 @@
 /coverage
 /junit
 /tmp
+
+# Gemnasium gem configuration file
+config/gemnasium.yml

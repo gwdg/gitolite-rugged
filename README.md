@@ -1,50 +1,108 @@
-## ![logo](https://raw.github.com/jbox-web/gitolite/gh-pages/images/git_logo.png) gitolite
+## gitolite-rugged
 
-### A gem which makes configuring your own Git hosting easy ;)
+**This gem is a fork from the [jbox-gitolite](https://raw.github.com/jbox-web/gitolite) gem employing [libgit2/rugged](https://github.com/libgit2/rugged).**
 
 This gem is designed to provide a Ruby interface to the [Gitolite](https://github.com/sitaramc/gitolite) Git backend system.
 
 It provides these functionalities :
 
-* [SSH Public Keys Management](https://github.com/jbox-web/gitolite/wiki/Features#wiki-ssh-public-keys-management)
-* [Repositories Management](https://github.com/jbox-web/gitolite/wiki/Features#wiki-repositories-management)
-* [Gitolite Admin Repository Bootstrapping](https://github.com/jbox-web/gitolite/wiki/Features#wiki-gitolite-admin-repository-bootstrapping)
-
-You can follow announcements [here](https://github.com/jbox-web/gitolite/wiki/Announcements) or take a look at the [roadmap](https://github.com/jbox-web/gitolite/wiki/Roadmap).
+* SSH Public Keys Management
+* Repositories Management
+* Gitolite Admin Repository Bootstrapping
 
 ## Code status
 
-* [![Gem Version](https://badge.fury.io/rb/jbox-gitolite.svg)](http://badge.fury.io/rb/jbox-gitolite)
-* [![Build Status](https://travis-ci.org/jbox-web/gitolite.svg?branch=devel)](https://travis-ci.org/jbox-web/gitolite)
-* [![Code Climate](https://codeclimate.com/github/jbox-web/gitolite.png)](https://codeclimate.com/github/jbox-web/gitolite)
-* [![Dependency Status](https://gemnasium.com/jbox-web/gitolite.svg)](https://gemnasium.com/jbox-web/gitolite)
+* [![Gem Version](https://badge.fury.io/rb/gitolite-rugged.svg)](http://badge.fury.io/rb/gitolite-rugged)
+* [![Build Status](https://travis-ci.org/oliverguenther/gitolite-rugged.svg?branch=devel)](https://travis-ci.org/oliverguenther/gitolite-rugged)
+* [![Code Climate](https://codeclimate.com/github/oliverguenther/gitolite-rugged.png)](https://codeclimate.com/github/oliverguenther/gitolite-rugged)
+* [![Dependency Status](https://gemnasium.com/oliverguenther/gitolite-rugged.svg)](https://gemnasium.com/oliverguenther/gitolite-rugged)
+
 
 ## Requirements ##
 * Ruby 1.9.x or 2.0.x
 * a working [gitolite](https://github.com/sitaramc/gitolite) installation
-* the <tt>gitolite-admin</tt> repository checked out locally
+* The [rugged](https://github.com/libgit2/rugged) bindings to libgit2 with SSH-key credentials added (currently on devel-branch).
 
 ## Installation ##
 
-    gem install jbox-gitolite
+    gem install gitolite-rugged
 
-Read the documentation and more in the [Wiki](https://github.com/jbox-web/gitolite/wiki).
+
+## Usage ##
+
+### Bootstrapping the gitolite-admin.git repository ###
+
+You can have `gitolite-rugged` clone the repository for you on demand, however I would recommend cloning it manually.
+See it as a basic check that your gitolite installation was correctly set up.
+
+In both cases, use the following code to create an instance of the manager:
+
+	settings = { :public_key => '~/.ssh/id_rsa.pub', :private_key => '~/.ssh/id_rsa' }
+	admin = Gitolite::GitoliteAdmin.new('/home/myuser/gitolite-admin', settings)
+		
+For cloning and pushing to the gitolite-admin.git, you have to provide several options to `GitoliteAdmin` in the settings hash. The following keys are used.
+
+* **:git_user** The git user to SSH to (:git_user@localhost:gitolite-admin.git), defaults to 'git'
+* **:host** Hostname for clone url. Defaults to 'localhost'
+* **:private_key** The key file containing the private SSH key for :git_user
+* **:public_key** The key file containing the public SSH key for :git_user
+* **:author_name:** The git author name to commit with (default: 'gitolite-rugged gem')
+* **:author_email** The git author e-mail address to commit with (default: 'gitolite-rugged@localhost')
+* **:commit_msg** The commit message to use when updating the repo (default: 'Commited by the gitolite-rugged gem')
+
+### Managing Public Keys ###
+
+To add a key, create a `SSHKey` object and use the `add_key(key)` method of GitoliteAdmin.
+
+	# From filesystem
+	key_from_file = SSHKey.from_file("/home/alice/.ssh/id_rsa.pub")
+	
+	# From String, which requires us to add an owner manually
+	key_from_string = SSHKey.from_string('ssh-rsa AAAAB3N/* .... */JjZ5SgfIKab bob@localhost', 'bob')
+	
+	admin.add_key(key_from_string)
+	admin.add_key(key_from_file)
+	
+Note that you can add a *location* using the syntax described in [the Gitolite documentation](http://gitolite.com/gitolite/users.html#old-style-multi-keys).
+	
+
+To write out the changes to the keys to the filesystem and push them to gitolite, call `admin.save_and_apply`.
+You can also manually call `admin.save` to commit the changes locally, but not push them.
+
+
+### Managing Repositories ###
+
+To add a new repository, we first create and configure it, and then add it to the memory representation of gitolite:
+
+	repo = Gitolite::Config::Repo.new('foobar')
+	repo.add_permission("RW+", "alice", "bob")
+	
+	# Add the repo
+	admin.config.add_repo(repo)
+	
+To remove a repository called 'foobar', execute `config.rm_repo('foobar')`.
+
+
+### Groups ###
+
+As in the [Gitolite Config](http://gitolite.com/gitolite/groups.html) you can define groups as an alias to repos or users.
+
+	# Creating a group
+	devs = Gitolite::Config::Group.new('developers')
+	devs.add_users("alice", "bob")
+	
+	# Adding a group to config
+	admin.config.add_group(devs)
+
+
 
 ## Copyrights & License
-gitolite is completely free and open source and released under the [MIT License](https://github.com/jbox-web/gitolite/blob/devel/LICENSE.txt).
+gitolite-rugged is completely free and open source and released under the [MIT License](https://github.com/oliverguenther/gitolite/blob/devel/LICENSE.txt).
+
+Copyright (c) 2014 Oliver Günther (mail@oliverguenther.de)
+
+Based on the jbox-gitolite fork by Nicolas Rodriguez, which itself is based on the original gitolite gem by Stafford Brunk.
 
 Copyright (c) 2013-2014 Nicolas Rodriguez (nrodriguez@jbox-web.com), JBox Web (http://www.jbox-web.com) [![endorse](https://api.coderwall.com/n-rodriguez/endorsecount.png)](https://coderwall.com/n-rodriguez)
 
 Copyright (c) 2011-2013 Stafford Brunk (stafford.brunk@gmail.com)
-
-## Contribute
-
-You can contribute to this plugin in many ways such as :
-* Helping with documentation
-* Contributing code (features or bugfixes)
-* Reporting a bug
-* Submitting translations
-
-You can also donate :)
-
-[![Donate](https://www.paypalobjects.com/en_US/i/btn/btn_donate_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=FBT7E7DAVVEEU)

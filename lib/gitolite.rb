@@ -1,5 +1,5 @@
 module Gitolite
-  require 'grit'
+  require 'rugged'
   require 'gratr'
   require 'gitolite/gitolite_admin'
   require 'gitolite/dirty_proxy'
