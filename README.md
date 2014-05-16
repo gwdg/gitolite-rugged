@@ -1,6 +1,6 @@
 ## gitolite-rugged
 
-**This gem is a fork from the [jbox-gitolite](https://raw.github.com/jbox-web/gitolite) gem employing [libgit2/rugged](https://github.com/libgit2/rugged).**
+### This gem is a fork from the [jbox-gitolite](https://github.com/jbox-web/gitolite) gem employing [libgit2/rugged](https://github.com/libgit2/rugged).
 
 This gem is designed to provide a Ruby interface to the [Gitolite](https://github.com/sitaramc/gitolite) Git backend system.
 
@@ -15,7 +15,6 @@ It provides these functionalities :
 * [![Gem Version](https://badge.fury.io/rb/gitolite-rugged.svg)](http://badge.fury.io/rb/gitolite-rugged)
 * [![Build Status](https://travis-ci.org/oliverguenther/gitolite-rugged.svg?branch=devel)](https://travis-ci.org/oliverguenther/gitolite-rugged)
 * [![Code Climate](https://codeclimate.com/github/oliverguenther/gitolite-rugged.png)](https://codeclimate.com/github/oliverguenther/gitolite-rugged)
-* [![Dependency Status](https://gemnasium.com/oliverguenther/gitolite-rugged.svg)](https://gemnasium.com/oliverguenther/gitolite-rugged)
 
 
 ## Requirements ##
@@ -103,6 +102,6 @@ Copyright (c) 2014 Oliver Günther (mail@oliverguenther.de)
 
 Based on the jbox-gitolite fork by Nicolas Rodriguez, which itself is based on the original gitolite gem by Stafford Brunk.
 
-Copyright (c) 2013-2014 Nicolas Rodriguez (nrodriguez@jbox-web.com), JBox Web (http://www.jbox-web.com) [![endorse](https://api.coderwall.com/n-rodriguez/endorsecount.png)](https://coderwall.com/n-rodriguez)
+Copyright (c) 2013-2014 Nicolas Rodriguez (nrodriguez@jbox-web.com), JBox Web (http://www.jbox-web.com)
 
 Copyright (c) 2011-2013 Stafford Brunk (stafford.brunk@gmail.com)
