@@ -74,11 +74,11 @@ module Gitolite
         end
 
         @config.each do |k, v|
-          repo += "  config " + k + " = " + v + "\n"
+          repo += "  config " + k + " = " + v.to_s + "\n"
         end
 
         @options.each do |k, v|
-          repo += "  option " + k + " = " + v + "\n"
+          repo += "  option " + k + " = " + v.to_s + "\n"
         end
 
         repo

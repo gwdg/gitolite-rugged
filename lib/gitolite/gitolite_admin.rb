@@ -1,25 +1,26 @@
+require 'pathname'
 module Gitolite
   class GitoliteAdmin
 
     attr_accessor :repo
 
-    CONF_DIR    = "conf"
-    KEY_DIR     = "keydir"
-
-    CONFIG_FILE = "gitolite.conf"
-    CONFIG_PATH = File.join(CONF_DIR, "gitolite.conf")
-
-
     # Default settings
-    DEFAULT_SETTINGS = {
+    DEFAULTS = {
       # clone/push url settings
-      git_user: 'git', 
+      git_user: 'git',
       hostname: 'localhost',
 
       # Commit settings
       author_name: 'gitolite-rugged gem',
       author_email: 'gitolite-rugged@localhost',
-      commit_msg: 'Commited by the gitolite-rugged gem'
+      commit_msg: 'Commited by the gitolite-rugged gem',
+
+      # Gitolite-Admin settings
+      config_dir: "conf",
+      key_dir: "keydir",
+      key_subdir: "",
+      config_file: "gitolite.conf",
+      lock_file_path: '.lock'
     }
 
     class << self
@@ -37,8 +38,8 @@ module Gitolite
         end
 
         # Check if config file, key directory exist
-        [ File.join(dir, CONF_DIR), File.join(dir, KEY_DIR),
-          File.join(dir, CONFIG_PATH)
+        [ File.join(dir, DEFAULTS[:config_dir]), File.join(dir, DEFAULTS[:key_dir]),
+          File.join(dir, DEFAULTS[:config_dir], DEFAULTS[:config_file])
         ].each { |f| return false unless File.exists?(f) }
 
         true
@@ -53,14 +54,24 @@ module Gitolite
     # the gitolite-admin repository
     #
     # Settings:
+    # [Connection]
     # :git_user: The git user to SSH to (:git_user@localhost:gitolite-admin.git), defaults to 'git'
     # :private_key: The key file containing the private SSH key for :git_user
     # :public_key: The key file containing the public SSH key for :git_user
     # :host: Hostname for clone url. Defaults to 'localhost'
+    #
+    # [Gitolite-Admin]
+    # :config_dir: Config directory within gitolite repository (defaults to 'conf')
+    # :key_dir: Public key directory within gitolite repository (defaults to 'keydir')
+    # :config_file: Config file to parse (default: 'gitolite.conf')
+    # **use only when you use the 'include' directive of gitolite)**
+    # :key_subdir: Where to store gitolite-rugged known keys, defaults to '' (i.e., directly in keydir)
+    # :lock_file_path: location of the transaction lockfile, defaults to <gitolite-admin.git>/.lock
+    #
     # The settings hash is forwarded to +GitoliteAdmin.new+ as options.
     def initialize(path, settings = {})
       @path = path
-      @settings = DEFAULT_SETTINGS.merge(settings)
+      @settings = DEFAULTS.merge(settings)
 
       # Ensure SSH key settings exist
       @settings.fetch(:public_key)
@@ -71,20 +82,37 @@ module Gitolite
         username: settings[:git_user], publickey: settings[:public_key], 
         privatekey: settings[:private_key] )
       
-      @repo = 
+      @repo =
       if self.class.is_gitolite_admin_repo?(path)
-        Rugged::Repository.new(path)
+        Rugged::Repository.new(path, credentials: @credentials)
       else
         clone
       end
 
-      @config_file_path = File.join(@path, CONF_DIR, CONFIG_FILE)
-      @conf_dir_path    = File.join(@path, CONF_DIR)
-      @key_dir_path     = File.join(@path, KEY_DIR)
+      @config_dir_path    = File.join(@path, @settings[:config_dir])
+      @config_file_path = File.join(@config_dir_path, @settings[:config_file])
+      @key_dir_path     = File.join(@path, relative_key_dir)
 
       @commit_author = { email: settings[:author_email], name: settings[:author_name] }
 
       reload!
+    end
+
+
+    #
+    # Returns the relative directory to the gitolite config file location.
+    # I.e., settings[config_dir]/settings[config_file]
+    # Defaults to 'conf/gitolite.conf'
+    def relative_config_file
+      File.join(@settings[:config_dir], @settings[:config_file])
+    end
+
+    #
+    # Returns the relative directory to the public key location.
+    # I.e., settings[key_dir]/settings[key_subdir]
+    # Defaults to 'keydir/'
+    def relative_key_dir
+      File.join(@settings[:key_dir], @settings[:key_subdir])
     end
 
     def config
@@ -138,28 +166,25 @@ module Gitolite
 
     # Writes all changed aspects out to the file system
     # will also stage all changes then commit
-    def save()
+    def save(commit_msg = nil)
 
       # Add all changes to index (staging area)
       index = @repo.index
 
       #Process config file (if loaded, i.e. may be modified)
       if @config
-        new_conf = @config.to_file(@conf_dir_path)
-
-        # Rugged wants relative paths
-        index.add(CONFIG_PATH)
+        new_conf = @config.to_file(path=@config_dir_path)
+        index.add(relative_config_file)
       end
 
       #Process ssh keys (if loaded, i.e. may be modified)
       if @ssh_keys
-        files = list_keys.map{|f| File.basename f}
-        keys  = @ssh_keys.values.map{|f| f.map {|t| t.filename}}.flatten
+        files = list_keys.map{|f| relative_key_path(f) }
+        keys  = @ssh_keys.values.map{|f| f.map {|t| t.relative_path}}.flatten
 
-        to_remove = (files - keys).map { |f| File.join(@key_dir, f) }
-        to_remove.each do |key|
-          File.unlink key
-          index.remove key
+        to_remove = (files - keys).each do |key|
+          SSHKey.remove(key, @key_dir_path)
+          index.remove File.join(relative_key_dir, key)
         end
 
         @ssh_keys.each_value do |key|
@@ -167,7 +192,7 @@ module Gitolite
           next if key.respond_to?(:dirty?) && !key.dirty?
           key.each do |k|
             new_key = k.to_file(@key_dir_path)
-            index.add new_key
+            index.add File.join(relative_key_dir, k.relative_path)
           end
         end
       end
@@ -181,7 +206,7 @@ module Gitolite
       Rugged::Commit.create(@repo,
         author: commit_author,
         committer: commit_author,
-        message: @settings[:commit_msg],
+        message: commit_msg || @settings[:commit_msg],
         parents: [repo.head.target],
         tree: commit_tree,
         update_ref: 'HEAD'
@@ -191,7 +216,7 @@ module Gitolite
 
     # Push back to origin
     def apply
-      @repo.push 'origin', ['refs/heads/master']
+      @repo.push('origin', ['refs/heads/master'], credentials: @credentials)
     end
 
 
@@ -199,6 +224,19 @@ module Gitolite
     def save_and_apply()
       save
       apply
+    end
+
+
+    # Lock the gitolite-admin directory and yield.
+    # After the block is completed, calls +apply+ only.
+    # You have to commit your changes within the transaction block
+    def transaction
+      get_lock do
+        yield
+
+        # Push all changes
+        apply
+      end
     end
 
 
@@ -215,7 +253,7 @@ module Gitolite
       merge_index = repo.merge_commits(master, origin_master)
 
       # Complete the merge by comitting it
-      merge_commit = Rugged::Commit.create(@repo, 
+      merge_commit = Rugged::Commit.create(@repo,
         parents: [ master, origin_master ],
         tree: merge_index.write_tree(@repo),
         message: '[gitolite-rugged] Merged `origin/master` into `master`',
@@ -232,8 +270,8 @@ module Gitolite
 
 
     # Clone the gitolite-admin repo
-    # to the given path.  
-    # 
+    # to the given path.
+    #
     # The repo is cloned from the url
     # +(:git_user)@(:hostname)/gitolite-admin.git+
     #
@@ -241,8 +279,8 @@ module Gitolite
     # E.g., +git@localhost:2222/gitolite-admin.git+
     #
     def clone()
-      Rugged::Repository.clone_at(admin_url(@settings), File.expand_path(@path), credentials: @creds)
-    end    
+      Rugged::Repository.clone_at(admin_url(@settings), File.expand_path(@path), credentials: @credentials)
+    end
 
 
     def load_config
@@ -252,6 +290,13 @@ module Gitolite
 
     def list_keys
       Dir.glob(@key_dir_path + '/**/*.pub')
+    end
+
+    # Returns the relative key path
+    # <owner>/<location>/<owner> given an absolute path
+    # below the keydir.
+    def relative_key_path(key_path)
+      Pathname.new(key_path).relative_path_from(Pathname.new(@key_dir_path)).to_s
     end
 
 
@@ -271,6 +316,24 @@ module Gitolite
       keys.values.each{|set| set.clean_up!}
 
       keys
+    end
+
+    def lock_file_path
+      File.expand_path(@settings[:lock_file_path], @path)
+    end
+
+
+    # Aquire LOCK_EX on the gitolite-admin.git directory .
+    # Use +GitoliteAdmin.transaction+ to modify with flock.
+    def get_lock
+      File.open(lock_file_path, File::RDWR|File::CREAT, 0644) do |file|
+        file.sync = true
+        file.flock(File::LOCK_EX)
+
+        yield
+
+        file.flock(File::LOCK_UN)
+      end
     end
   end
 end

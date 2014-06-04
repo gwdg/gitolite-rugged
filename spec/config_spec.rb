@@ -4,7 +4,6 @@ describe Gitolite::Config do
 
   conf_dir   = File.join(File.dirname(__FILE__), 'fixtures', 'configs')
   output_dir = '/tmp'
-  # output_dir = File.join(File.dirname(File.dirname(__FILE__)), 'tmp')
 
   describe "#new" do
     it 'should read a simple configuration' do
@@ -348,14 +347,14 @@ describe Gitolite::Config do
       File.unlink(file)
     end
 
-    it 'should raise an ArgumentError when an invalid path is specified' do
+    it 'should create the given directory if it does not exist' do
       c = Gitolite::Config.init
-      lambda { c.to_file('/does/not/exist') }.should raise_error(ArgumentError)
-    end
-
-    it 'should raise an ArgumentError when a filename is specified in the path' do
-      c = Gitolite::Config.init
-      lambda{ c.to_file('/home/test.rb') }.should raise_error(ArgumentError)
+      Dir.mktmpdir("foo") do |dir|
+        target = File.join(dir, "someconfigfile")
+        File.exists?(target).should eql(false)
+        c.to_file(target)
+        File.exists?(target).should eql(true)
+      end
     end
 
     it 'should resolve group dependencies such that all groups are defined before they are used' do

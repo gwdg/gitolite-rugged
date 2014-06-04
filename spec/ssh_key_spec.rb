@@ -2,9 +2,8 @@ require 'spec_helper'
 
 describe Gitolite::SSHKey do
 
-  key_dir    = File.join(File.dirname(__FILE__), 'fixtures', 'keys')
+  key_dir    = File.join(File.dirname(__FILE__), 'fixtures', 'keys', 'bob')
   output_dir = '/tmp'
-  # output_dir = File.join(File.dirname(File.dirname(__FILE__)), 'tmp')
 
   describe "#from_string" do
     it 'should construct an SSH key from a string' do
@@ -49,144 +48,35 @@ describe Gitolite::SSHKey do
 
       s.owner.should == "bob"
       s.blob.should == key_string[1]
+      s.location.should == ''
     end
 
-    it 'should load a key with a location from a file' do
-      key = File.join(key_dir, 'bob@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob'
-      s.location.should == 'desktop'
-    end
-
-    it 'should load a key with owner and location from a file' do
-      key = File.join(key_dir, 'joe-bob@god-zilla.com@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'joe-bob@god-zilla.com'
-      s.location.should == 'desktop'
-    end
-  end
-
-  describe '#owner' do
-    it 'owner should be bob for bob.pub' do
+    it 'should load a key from a file' do
       key = File.join(key_dir, 'bob.pub')
       s = SSHKey.from_file(key)
       s.owner.should == 'bob'
+      s.location.should == ''
     end
 
-    it 'owner should be bob for bob@desktop.pub' do
-      key = File.join(key_dir, 'bob@desktop.pub')
+    it 'should load a key with an e-mail owner from a file' do
+      key = File.join(key_dir, 'bob@example.com.pub')
+      s = SSHKey.from_file(key)
+      s.owner.should == 'bob@example.com'
+      s.location.should == ''
+    end
+
+    it 'should load a key from a file within location' do
+      key = File.join(key_dir, 'desktop', 'bob.pub')
       s = SSHKey.from_file(key)
       s.owner.should == 'bob'
-    end
-
-    it 'owner should be bob@zilla.com for bob@zilla.com.pub' do
-      key = File.join(key_dir, 'bob@zilla.com.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob@zilla.com'
-    end
-
-    it "owner should be joe-bob@god-zilla.com for joe-bob@god-zilla.com@desktop.pub" do
-      key = File.join(key_dir, 'joe-bob@god-zilla.com@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'joe-bob@god-zilla.com'
-    end
-
-    it "owner should be bob.joe@test.zilla.com for bob.joe@test.zilla.com@desktop.pub" do
-      key = File.join(key_dir, 'bob.joe@test.zilla.com@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob.joe@test.zilla.com'
-    end
-
-    it "owner should be bob+joe@test.zilla.com for bob+joe@test.zilla.com@desktop.pub" do
-      key = File.join(key_dir, 'bob+joe@test.zilla.com@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob+joe@test.zilla.com'
-    end
-
-    it 'owner should be bob@zilla.com for bob@zilla.com@desktop.pub' do
-      key = File.join(key_dir, 'bob@zilla.com@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob@zilla.com'
-    end
-
-    it 'owner should be jakub123 for jakub123.pub' do
-      key = File.join(key_dir, 'jakub123.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'jakub123'
-    end
-
-    it 'owner should be jakub123@foo.net for jakub123@foo.net.pub' do
-      key = File.join(key_dir, 'jakub123@foo.net.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'jakub123@foo.net'
-    end
-
-    it 'owner should be joe@sch.ool.edu for joe@sch.ool.edu' do
-      key = File.join(key_dir, 'joe@sch.ool.edu.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'joe@sch.ool.edu'
-    end
-
-    it 'owner should be joe@sch.ool.edu for joe@sch.ool.edu@desktop.pub' do
-      key = File.join(key_dir, 'joe@sch.ool.edu@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'joe@sch.ool.edu'
-    end
-  end
-
-  describe '#location' do
-    it 'location should be "" for bob.pub' do
-      key = File.join(key_dir, 'bob.pub')
-      s = SSHKey.from_file(key)
-      s.location.should == ''
-    end
-
-    it 'location should be "desktop" for bob@desktop.pub' do
-      key = File.join(key_dir, 'bob@desktop.pub')
-      s = SSHKey.from_file(key)
       s.location.should == 'desktop'
     end
 
-    it 'location should be "" for bob@zilla.com.pub' do
-      key = File.join(key_dir, 'bob@zilla.com.pub')
+    it 'should load a key from a file within location' do
+      key = File.join(key_dir, 'school', 'bob.pub')
       s = SSHKey.from_file(key)
-      s.location.should == ''
-    end
-
-    it 'location should be "desktop" for bob@zilla.com@desktop.pub' do
-      key = File.join(key_dir, 'bob@zilla.com@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.location.should == 'desktop'
-    end
-
-    it 'location should be "" for jakub123.pub' do
-      key = File.join(key_dir, 'jakub123.pub')
-      s = SSHKey.from_file(key)
-      s.location.should == ''
-    end
-
-    it 'location should be "" for jakub123@foo.net.pub' do
-      key = File.join(key_dir, 'jakub123@foo.net.pub')
-      s = SSHKey.from_file(key)
-      s.location.should == ''
-    end
-
-    it 'location should be "" for joe@sch.ool.edu' do
-      key = File.join(key_dir, 'joe@sch.ool.edu.pub')
-      s = SSHKey.from_file(key)
-      s.location.should == ''
-    end
-
-    it 'location should be "desktop" for joe@sch.ool.edu@desktop.pub' do
-      key = File.join(key_dir, 'joe@sch.ool.edu@desktop.pub')
-      s = SSHKey.from_file(key)
-      s.location.should == 'desktop'
-    end
-
-    it 'location should be "foo-bar" for bob@foo-bar.pub' do
-      key = File.join(key_dir, 'bob@foo-bar.pub')
-      s = SSHKey.from_file(key)
-      s.location.should == 'foo-bar'
+      s.owner.should == 'bob'
+      s.location.should == 'school'
     end
   end
 
@@ -199,14 +89,6 @@ describe Gitolite::SSHKey do
       s.type.should == parts[0]
       s.blob.should == parts[1]
       s.email.should == parts[2]
-    end
-  end
-
-  describe '#email' do
-    it 'should use owner if email is missing' do
-      key = File.join(key_dir, 'jakub123@foo.net.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == s.email
     end
   end
 
@@ -286,7 +168,7 @@ describe Gitolite::SSHKey do
       s.filename.should == "#{owner}.pub"
     end
 
-    it 'should create a filename that is the <email>@<location>.pub' do
+    it 'should create a filename that is the <email>.pub' do
       type = "ssh-rsa"
       blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
       email = Forgery::Internet.email_address
@@ -294,7 +176,8 @@ describe Gitolite::SSHKey do
 
       s = SSHKey.new(type, blob, email, nil, location)
 
-      s.filename.should == "#{email}@#{location}.pub"
+      s.filename.should == "#{email}.pub"
+      s.relative_path.should == File.join(email, location, "#{email}.pub")
     end
 
     it 'should create a filename that is the <owner>@<location>.pub' do
@@ -306,7 +189,7 @@ describe Gitolite::SSHKey do
 
       s = SSHKey.new(type, blob, email, owner, location)
 
-      s.filename.should == "#{owner}@#{location}.pub"
+      s.filename.should == "#{owner}.pub"
     end
   end
 
@@ -324,7 +207,7 @@ describe Gitolite::SSHKey do
       s.to_file(output_dir)
 
       ## compare raw string with written file
-      s.to_s.should == File.read(File.join(output_dir, s.filename))
+      s.to_s.should == File.read(File.join(output_dir, owner, location, s.filename))
     end
 
     it 'should return the filename written' do
@@ -335,8 +218,7 @@ describe Gitolite::SSHKey do
       location = Forgery::Basic.text(:at_least => 8, :at_most => 15)
 
       s = SSHKey.new(type, blob, email, owner, location)
-
-      s.to_file(output_dir).should == File.join(output_dir, s.filename)
+      s.to_file(output_dir).should == File.join(output_dir, owner, location, s.filename)
     end
   end
 

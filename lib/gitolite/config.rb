@@ -1,4 +1,5 @@
 require 'tempfile'
+require 'fileutils'
 
 module Gitolite
 
@@ -73,7 +74,7 @@ module Gitolite
 
 
     def to_file(path=".", filename=@filename)
-      raise ArgumentError, "Path contains a filename or does not exist" unless File.directory?(path)
+      FileUtils.mkdir_p(path) unless File.directory?(path)
 
       new_conf = File.join(path, filename)
       File.open(new_conf, "w") do |f|
@@ -118,6 +119,9 @@ module Gitolite
 
     def process_config(config)
       context = [] #will store our context for permissions or config declarations
+
+      # On first call with a custom *.conf, the config might not yet exist
+      return unless File.exists?(config)
 
       #Read each line of our config
       File.open(config, 'r').each do |l|

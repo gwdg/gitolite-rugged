@@ -1,6 +1,10 @@
 ## gitolite-rugged
+[![Gem Version](https://badge.fury.io/rb/gitolite-rugged.svg)](http://badge.fury.io/rb/gitolite-rugged)
+[![Build Status](https://travis-ci.org/oliverguenther/gitolite-rugged.svg?branch=devel)](https://travis-ci.org/oliverguenther/gitolite-rugged)
+[![Code Climate](https://codeclimate.com/github/oliverguenther/gitolite-rugged.png)](https://codeclimate.com/github/oliverguenther/gitolite-rugged)
 
 ### This gem is a fork from the [jbox-gitolite](https://github.com/jbox-web/gitolite) gem employing [libgit2/rugged](https://github.com/libgit2/rugged).
+
 
 This gem is designed to provide a Ruby interface to the [Gitolite](https://github.com/sitaramc/gitolite) Git backend system.
 
@@ -9,13 +13,6 @@ It provides these functionalities :
 * SSH Public Keys Management
 * Repositories Management
 * Gitolite Admin Repository Bootstrapping
-
-## Code status
-
-* [![Gem Version](https://badge.fury.io/rb/gitolite-rugged.svg)](http://badge.fury.io/rb/gitolite-rugged)
-* [![Build Status](https://travis-ci.org/oliverguenther/gitolite-rugged.svg?branch=devel)](https://travis-ci.org/oliverguenther/gitolite-rugged)
-* [![Code Climate](https://codeclimate.com/github/oliverguenther/gitolite-rugged.png)](https://codeclimate.com/github/oliverguenther/gitolite-rugged)
-
 
 ## Requirements ##
 * Ruby 1.9.x or 2.0.x
