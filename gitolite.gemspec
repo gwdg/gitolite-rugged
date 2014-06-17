@@ -26,7 +26,7 @@ Gem::Specification.new do |s|
 
   s.add_development_dependency "rspec_junit_formatter", "~> 0.1", ">= 0.1.6"
 
-  s.add_dependency "rugged", "~> 0.19",   ">= 0.19.0"
+  s.add_dependency "rugged", "~> 0.21", ">= 0.21.0"
   s.add_dependency "gratr19", "~> 0.4.4", ">= 0.4.4.1"
 
   s.files         = `git ls-files`.split("\n")

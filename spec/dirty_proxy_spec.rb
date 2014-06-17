@@ -28,27 +28,27 @@ describe Gitolite::DirtyProxy do
 
   describe 'dirty checking methods' do
     it 'should respond to clean_up!' do
-      proxy.respond_to?(:clean_up!).should be_true
+      proxy.respond_to?(:clean_up!).should be true
     end
 
     it 'should respond to dirty?' do
-      proxy.respond_to?(:dirty?).should be_true
+      proxy.respond_to?(:dirty?).should be true
     end
 
     context 'when just initialized' do
       it 'should be clean' do
-        proxy.dirty?.should be_false
+        proxy.dirty?.should be false
       end
     end
 
     shared_examples 'dirty? clean_up!' do
       it 'should be dirty' do
-        proxy.dirty?.should be_true
+        proxy.dirty?.should be true
       end
 
       it 'should be clean again after clean_up!' do
         proxy.clean_up!
-        proxy.dirty?.should be_false
+        proxy.dirty?.should be false
       end
     end
 

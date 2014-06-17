@@ -33,7 +33,7 @@ module Gitolite
         begin
           repo = Rugged::Repository.new(dir)
           return false if repo.empty?
-        rescue Rugged::RepositoryError
+        rescue Rugged::RepositoryError, Rugged::OSError
           return false
         end
 
@@ -46,7 +46,7 @@ module Gitolite
       end
 
       def admin_url(settings)
-        [settings[:git_user], '@', settings[:host], '/gitolite-admin.git'].join
+        ['ssh://', settings[:git_user], '@', settings[:host], '/gitolite-admin.git'].join
       end
     end
 
@@ -79,9 +79,11 @@ module Gitolite
 
       # setup credentials
       @credentials = Rugged::Credentials::SshKey.new(
-        username: settings[:git_user], publickey: settings[:public_key], 
-        privatekey: settings[:private_key] )
-      
+        username: @settings[:git_user],
+        publickey: settings[:public_key],
+        privatekey: settings[:private_key]
+      )
+
       @repo =
       if self.class.is_gitolite_admin_repo?(path)
         Rugged::Repository.new(path, credentials: @credentials)
@@ -93,7 +95,7 @@ module Gitolite
       @config_file_path = File.join(@config_dir_path, @settings[:config_file])
       @key_dir_path     = File.join(@path, relative_key_dir)
 
-      @commit_author = { email: settings[:author_email], name: settings[:author_name] }
+      @commit_author = { email: @settings[:author_email], name: @settings[:author_name] }
 
       reload!
     end
@@ -201,7 +203,7 @@ module Gitolite
       commit_tree = index.write_tree @repo
       index.write
 
-      commit_author = { email: 'wee@example.org', name: 'gitolite-rugged gem', time: Time.now }
+      commit_author = @commit_author.merge(time: Time.now)
 
       Rugged::Commit.create(@repo,
         author: commit_author,
@@ -278,8 +280,8 @@ module Gitolite
     # The hostname may use an optional :port to allow for custom SSH ports.
     # E.g., +git@localhost:2222/gitolite-admin.git+
     #
-    def clone()
-      Rugged::Repository.clone_at(admin_url(@settings), File.expand_path(@path), credentials: @credentials)
+    def clone
+      Rugged::Repository.clone_at(GitoliteAdmin.admin_url(@settings), File.expand_path(@path), credentials: @credentials)
     end
 
 

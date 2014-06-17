@@ -17,7 +17,7 @@ It provides these functionalities :
 ## Requirements ##
 * Ruby 1.9.x or 2.0.x
 * a working [gitolite](https://github.com/sitaramc/gitolite) installation
-* The [rugged](https://github.com/libgit2/rugged) bindings to libgit2 with SSH-key credentials added (currently on devel-branch).
+* The [rugged](https://github.com/libgit2/rugged) bindings to libgit2 with SSH-key credentials added (Version >= 0.21 or dev branch).
 
 ## Installation ##
 
