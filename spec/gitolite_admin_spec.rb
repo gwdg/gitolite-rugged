@@ -5,7 +5,7 @@ describe Gitolite::GitoliteAdmin do
   repo_dir   = File.join(File.dirname(__FILE__), 'fixtures', 'gitolite-admin')
 
   # Rugged doesn't complain when giving nil keys for testing
-  settings = {private_key: nil, public_key: nil}
+  settings = {private_key: nil, public_key: nil, update_on_init: false}
 
   describe '#is_gitolite_admin_repo?' do
     it 'should detect a non gitolite-admin repository' do

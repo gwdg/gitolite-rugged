@@ -20,7 +20,11 @@ module Gitolite
       key_dir: "keydir",
       key_subdir: "",
       config_file: "gitolite.conf",
-      lock_file_path: '.lock'
+      lock_file_path: '.lock',
+
+      # Repo settings
+      update_on_init: true,
+      reset_before_update: true
     }
 
     class << self
@@ -84,18 +88,21 @@ module Gitolite
         privatekey: settings[:private_key]
       )
 
-      @repo =
-      if self.class.is_gitolite_admin_repo?(path)
-        Rugged::Repository.new(path, credentials: @credentials)
-      else
-        clone
-      end
-
       @config_dir_path    = File.join(@path, @settings[:config_dir])
       @config_file_path = File.join(@config_dir_path, @settings[:config_file])
       @key_dir_path     = File.join(@path, relative_key_dir)
 
       @commit_author = { email: @settings[:author_email], name: @settings[:author_name] }
+
+      if self.class.is_gitolite_admin_repo?(path)
+        @repo = Rugged::Repository.new(path, credentials: @credentials )
+        # Update repository
+        if @settings[:update_on_init]
+          update
+        end
+      else
+        @repo = clone
+      end
 
       reload!
     end
@@ -151,10 +158,9 @@ module Gitolite
 
 
     # This method will destroy all local tracked changes, resetting the local gitolite
-    # git repo to HEAD and reloading the entire repository
+    # git repo to HEAD
     def reset!
       @repo.reset('origin/master', :hard)
-      reload!
     end
 
 
@@ -244,12 +250,19 @@ module Gitolite
 
     # Updates the repo with changes from remote master
     # Warning: This resets the repo before pulling in the changes.
-    def update(settings = {})
-      reset!
+    def update()
 
-      # Currently, this only supports merging origin/master into master.
-      master = repo.branches["master"].target
-      origin_master = repo.branches["origin/master"].target
+      # Reset --hard repo before update
+      if @settings[:reset_before_update]
+        reset!
+      end
+
+      # Fetch changes from origin
+      @repo.fetch('origin', credentials: @credentials )
+
+      # Currently, only merging from origin/master into master is supported.
+      master = @repo.references["refs/heads/master"].target
+      origin_master = @repo.references["refs/remotes/origin/master"].target
 
       # Create the merged index in memory
       merge_index = repo.merge_commits(master, origin_master)
@@ -261,7 +274,7 @@ module Gitolite
         message: '[gitolite-rugged] Merged `origin/master` into `master`',
         author: @commit_author,
         committer: @commit_author,
-        update_ref: 'master'
+        update_ref: 'refs/heads/master'
       )
 
       reload!
@@ -281,7 +294,7 @@ module Gitolite
     # E.g., +git@localhost:2222/gitolite-admin.git+
     #
     def clone
-      Rugged::Repository.clone_at(GitoliteAdmin.admin_url(@settings), File.expand_path(@path), credentials: @credentials)
+      Rugged::Repository.clone_at(GitoliteAdmin.admin_url(@settings), File.expand_path(@path), credentials: @credentials )
     end
 
 

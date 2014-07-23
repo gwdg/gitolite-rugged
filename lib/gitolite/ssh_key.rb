@@ -50,7 +50,7 @@ module Gitolite
         self.new(type, blob, email, owner, location)
       end
 
-            # Parse the key path above the key to be read.
+      # Parse the key path above the key to be read.
       # As we can omit the location, there are two possible options:
       #
       # 1. Location is empty. Path is <keydir>/<owner>/
