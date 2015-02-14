@@ -5,23 +5,22 @@ describe Gitolite::GitoliteAdmin do
   repo_dir   = File.join(File.dirname(__FILE__), 'fixtures', 'gitolite-admin')
 
   # Rugged doesn't complain when giving nil keys for testing
-  settings = {private_key: nil, public_key: nil, update_on_init: false}
+  settings = { private_key: nil, public_key: nil, update_on_init: false }
 
   describe '#is_gitolite_admin_repo?' do
     it 'should detect a non gitolite-admin repository' do
-      expect(GitoliteAdmin.is_gitolite_admin_repo?('/tmp')).to be false
+      expect(Gitolite::GitoliteAdmin.gitolite_admin_repo?('/tmp')).to be false
     end
   end
 
   describe '#save' do
     it 'should commit file to gitolite-admin repository' do
       Dir.mktmpdir('gitolite-rugged-admin-repo') do |dir|
-
-        tmp_repo = File.join(dir, "gitolite-admin")
+        tmp_repo = File.join(dir, 'gitolite-admin')
         FileUtils.cp_r(repo_dir, tmp_repo)
-        FileUtils.mv(File.join(tmp_repo, ".gitted"), File.join(tmp_repo, '.git'))
+        FileUtils.mv(File.join(tmp_repo, '.gitted'), File.join(tmp_repo, '.git'))
 
-        gl_admin = GitoliteAdmin.new(tmp_repo, settings)
+        gl_admin = Gitolite::GitoliteAdmin.new(tmp_repo, settings)
 
         c = Gitolite::Config.new(File.join(conf_dir, 'complicated.conf'))
         c.filename = 'gitolite.conf'
@@ -35,5 +34,4 @@ describe Gitolite::GitoliteAdmin do
       end
     end
   end
-
 end

@@ -1,237 +1,169 @@
 require 'spec_helper'
 
 describe Gitolite::SSHKey do
+  let(:key_root) { File.join(File.dirname(__FILE__), 'fixtures', 'keys') }
+  let(:key_path) { File.join(key_root, 'bob', 'bob.pub') }
 
-  key_dir    = File.join(File.dirname(__FILE__), 'fixtures', 'keys', 'bob')
-  output_dir = '/tmp'
+  let(:valid_key) { File.read(key_path) }
+  let(:invalid_key) { 'not_a_real_key' }
 
-  describe "#from_string" do
+  let(:output_dir) { '/tmp' }
+
+  describe '#from_string' do
     it 'should construct an SSH key from a string' do
-      key = File.join(key_dir, 'bob.pub')
-      key_string = File.read(key)
-      s = SSHKey.from_string(key_string, "bob")
+      s = Gitolite::SSHKey.from_string(valid_key, { owner: 'bob' })
 
-      s.owner.should == 'bob'
-      s.location.should == ""
-      s.blob.should == key_string.split[1]
+      expect(s.owner).to eq('bob')
+      expect(s.location).to eq(Gitolite::GitoliteAdmin::DEFAULTS[:location])
+
+      parts = valid_key.split
+      expect(s.type).to eq(parts[0])
+      expect(s.blob).to eq(parts[1])
+      expect(s.email).to eq(parts[2])
     end
 
     it 'should raise an ArgumentError when an owner isnt specified' do
-      key_string = "not_a_real_key"
-      lambda { SSHKey.from_string(key_string) }.should raise_error
+      expect { Gitolite::SSHKey.from_string(valid_key) }.to raise_error
     end
 
-    it 'should have a location when one is specified' do
-      key = File.join(key_dir, 'bob.pub')
-      key_string = File.read(key)
-      s = SSHKey.from_string(key_string, "bob", "kansas")
-
-      s.owner.should == 'bob'
-      s.location.should == "kansas"
-      s.blob.should == key_string.split[1]
+    it 'should raise an ArgumentError when the key is invalid' do
+      expect { Gitolite::SSHKey.from_string(invalid_key, { owner: 'bob' }) }.to raise_error
     end
 
-    it 'should raise an ArgumentError when owner is nil' do
-      lambda { SSHKey.from_string("bad_string", nil) }.should raise_error
-    end
+    it 'should use the location when one is specified' do
+      s = Gitolite::SSHKey.from_string(valid_key, { owner: 'bob', location: 'home' })
 
-    it 'should raise an ArgumentError when we get an invalid SSHKey string' do
-      lambda { SSHKey.from_string("bad_string", "bob") }.should raise_error
+      expect(s.owner).to eq('bob')
+      expect(s.location).to eq('home')
+      expect(s.blob).to eq(valid_key.split[1])
     end
   end
 
-  describe "#from_file" do
-    it 'should load a key from a file' do
-      key = File.join(key_dir, 'bob.pub')
-      s = SSHKey.from_file(key)
-      key_string = File.read(key).split
+  describe '#from_file' do
+    let(:sshkey) { Gitolite::SSHKey.from_file(key_root, key_path) }
 
-      s.owner.should == "bob"
-      s.blob.should == key_string[1]
-      s.location.should == ''
+    context 'with key in root' do
+      let(:key_path) {  File.join(key_root, 'alice.pub') }
+      it 'should load a basic key directly in the keydir' do
+        expect(sshkey.owner).to eq('alice')
+        expect(sshkey.location).to eq(Gitolite::GitoliteAdmin::DEFAULTS[:location])
+        expect(sshkey.subfolders).to eq([])
+      end
     end
 
-    it 'should load a key from a file' do
-      key = File.join(key_dir, 'bob.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob'
-      s.location.should == ''
+    it 'should load an old-style key from a file' do
+      expect(sshkey.owner).to eq('bob')
+      expect(sshkey.blob).to eq(valid_key.split[1])
+      expect(sshkey.location).to eq(Gitolite::GitoliteAdmin::DEFAULTS[:location])
+      expect(sshkey.subfolders).to eq(['bob'])
     end
 
-    it 'should load a key with an e-mail owner from a file' do
-      key = File.join(key_dir, 'bob@example.com.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob@example.com'
-      s.location.should == ''
+    context 'with arbitrary subfolders and location' do
+      let(:key_path) { File.join(key_root, 'bob', 'deploy', 'server1', 'bob_deploy.pub') }
+
+      it 'should load a key correctly' do
+        expect(sshkey.owner).to eq('bob_deploy')
+        expect(sshkey.location).to eq('server1')
+        expect(sshkey.subfolders).to eq(['bob', 'deploy'])
+      end
     end
 
-    it 'should load a key from a file within location' do
-      key = File.join(key_dir, 'desktop', 'bob.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob'
-      s.location.should == 'desktop'
+    context 'with an email as filename' do
+      let(:key_path) { File.join(key_root, 'bob', 'bob@example.com.pub') }
+
+      it 'should load a key with an e-mail owner from a file' do
+        expect(sshkey.owner).to eq('bob@example.com')
+        expect(sshkey.email).to eq('bob@example.com')
+
+        # parent does not match old-style owner directories,
+        # thus it is expected to be a location
+        expect(sshkey.location).to eq('bob')
+        expect(sshkey.subfolders).to eq([])
+      end
     end
 
-    it 'should load a key from a file within location' do
-      key = File.join(key_dir, 'school', 'bob.pub')
-      s = SSHKey.from_file(key)
-      s.owner.should == 'bob'
-      s.location.should == 'school'
-    end
-  end
+    context 'with subfolder and location' do
+      let(:key_path) { File.join(key_root, 'bob', 'desktop', 'bob.pub') }
 
-  describe '#keys' do
-    it 'should load ssh key properly' do
-      key = File.join(key_dir, 'bob.pub')
-      s = SSHKey.from_file(key)
-      parts = File.read(key).split #should get type, blob, email
-
-      s.type.should == parts[0]
-      s.blob.should == parts[1]
-      s.email.should == parts[2]
-    end
-  end
-
-  describe '#new' do
-    it 'should create a valid ssh key' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-
-      s = SSHKey.new(type, blob, email)
-
-      s.to_s.should == [type, blob, email].join(' ')
-      s.owner.should == email
-    end
-
-    it 'should create a valid ssh key while specifying an owner' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-      owner = Forgery::Name.first_name
-
-      s = SSHKey.new(type, blob, email, owner)
-
-      s.to_s.should == [type, blob, email].join(' ')
-      s.owner.should == owner
-    end
-
-    it 'should create a valid ssh key while specifying an owner and location' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-      owner = Forgery::Name.first_name
-      location = Forgery::Name.location
-
-      s = SSHKey.new(type, blob, email, owner, location)
-
-      s.to_s.should == [type, blob, email].join(' ')
-      s.owner.should == owner
-      s.location.should == location
+      it 'should load a key from a file within location' do
+        expect(sshkey.owner).to eq('bob')
+        expect(sshkey.location).to eq('desktop')
+        expect(sshkey.subfolders).to eq(['bob'])
+      end
     end
   end
 
-  describe '#hash' do
-    it 'should have two hash equalling one another' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-      owner = Forgery::Name.first_name
-      location = Forgery::Name.location
+  describe 'with forged data' do
+    let(:type) { 'ssh-rsa' }
+    let(:blob) { Forgery::Basic.text(at_least: 372, at_most: 372) }
+    let(:email) { Forgery::Internet.email_address }
+    let(:owner) { Forgery::Name.first_name }
+    let(:location) { Forgery::Name.location }
 
-      hash_test = [owner, location, type, blob, email].hash
-      s = SSHKey.new(type, blob, email, owner, location)
+    describe '#new' do
+      it 'should create a valid ssh key' do
+        s = Gitolite::SSHKey.new({ owner: email, type: type, blob: blob })
 
-      s.hash.should == hash_test
-    end
-  end
+        expect(s.to_s).to eq([type, blob, email].join(' '))
+        expect(s.owner).to eq(email)
+      end
 
-  describe '#filename' do
-    it 'should create a filename that is the <email>.pub' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
+      it 'should create a valid ssh key while specifying an owner and location' do
+        s = Gitolite::SSHKey.new({ owner: email, type: type, blob: blob, location: location })
 
-      s = SSHKey.new(type, blob, email)
-
-      s.filename.should == "#{email}.pub"
+        expect(s.to_s).to eq([type, blob, email].join(' '))
+        expect(s.owner).to eq(email)
+        expect(s.location).to eq(location)
+      end
     end
 
-    it 'should create a filename that is the <owner>.pub' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-      owner = Forgery::Name.first_name
+    describe '#filename' do
+      it 'should create a filename that is the <email>.pub' do
+        s = Gitolite::SSHKey.new({ owner: email, type: type, blob: blob })
 
-      s = SSHKey.new(type, blob, email, owner)
-
-      s.filename.should == "#{owner}.pub"
+        expect(s.filename).to eq("#{email}.pub")
+      end
     end
 
-    it 'should create a filename that is the <email>.pub' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-      location = Forgery::Basic.text(:at_least => 8, :at_most => 15)
+    describe '#relative_path' do
+      it 'should include the location' do
+        sshkey = Gitolite::SSHKey.new({ owner: email, type: type, blob: blob, location: location })
+        expect(sshkey.relative_path).to eq(File.join(location, "#{email}.pub"))
+      end
 
-      s = SSHKey.new(type, blob, email, nil, location)
-
-      s.filename.should == "#{email}.pub"
-      s.relative_path.should == File.join(email, location, "#{email}.pub")
+      it 'should include subfolders' do
+        sshkey = Gitolite::SSHKey.new(
+          {
+            owner: email,
+            type: type, blob: blob,
+            subfolders: ['foo', 'bar'], location: location
+          }
+        )
+        expect(sshkey.relative_path).to eq(File.join('foo', 'bar', location, "#{email}.pub"))
+      end
     end
 
-    it 'should create a filename that is the <owner>@<location>.pub' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-      owner = Forgery::Name.first_name
-      location = Forgery::Basic.text(:at_least => 8, :at_most => 15)
+    describe '#to_file' do
+      let(:sshkey) { Gitolite::SSHKey.new({ owner: owner, type: type, blob: blob, location: location }) }
 
-      s = SSHKey.new(type, blob, email, owner, location)
+      it 'should write a "valid" SSH public key to the file system' do
+        path = sshkey.to_file(output_dir)
+        expected_path = File.join(output_dir, location, "#{owner}.pub")
+        expect(path).to eq(expected_path)
 
-      s.filename.should == "#{owner}.pub"
-    end
-  end
-
-  describe '#to_file' do
-    it 'should write a "valid" SSH public key to the file system' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-      owner = Forgery::Name.first_name
-      location = Forgery::Basic.text(:at_least => 8, :at_most => 15)
-
-      s = SSHKey.new(type, blob, email, owner, location)
-
-      ## write file
-      s.to_file(output_dir)
-
-      ## compare raw string with written file
-      s.to_s.should == File.read(File.join(output_dir, owner, location, s.filename))
+        ## compare raw string with written file
+        expect(sshkey.to_s).to eq(File.read(expected_path))
+      end
     end
 
-    it 'should return the filename written' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-      owner = Forgery::Name.first_name
-      location = Forgery::Basic.text(:at_least => 8, :at_most => 15)
+    describe '==' do
+      it 'should have two keys equalling one another' do
+        type = 'ssh-rsa'
+        s1 = Gitolite::SSHKey.new({ owner: email, type: type, blob: blob })
+        s2 = Gitolite::SSHKey.new({ owner: email, type: type, blob: blob })
 
-      s = SSHKey.new(type, blob, email, owner, location)
-      s.to_file(output_dir).should == File.join(output_dir, owner, location, s.filename)
-    end
-  end
-
-  describe '==' do
-    it 'should have two keys equalling one another' do
-      type = "ssh-rsa"
-      blob = Forgery::Basic.text(:at_least => 372, :at_most => 372)
-      email = Forgery::Internet.email_address
-
-      s1 = SSHKey.new(type, blob, email)
-      s2 = SSHKey.new(type, blob, email)
-
-      s1.should == s2
+        expect(s1).to eq(s2)
+      end
     end
   end
 end
